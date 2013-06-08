@@ -1,5 +1,3 @@
-(load "tests-driver.scm")
-
 ;;;;
 ;;
 ;;  <EXPR> -> <Imm>

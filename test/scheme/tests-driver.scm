@@ -110,30 +110,6 @@
        (compile-program expr))
     (close-output-port p)))
 
-
-(define (execute)
-  (unless (fxzero? (system "./bin/stst > stst.out"))
-    (error 'execute "produced program exited abnormally")))
-
-(define (get-string)
-  (with-output-to-string
-    (lambda ()
-      (with-input-from-file "stst.out"
-        (lambda ()
-          (let f ()
-            (let ([c (read-char)])
-              (cond
-               [(eof-object? c) (void)]
-               [else (display c) (f)]))))))))
-
-(define (test-with-string-output test-id expr expected-output)
-   (run-compile expr)
-   (build)
-   (execute)
-   (unless (string=? expected-output (get-string))
-     (error 'test (format "output mismatch for test ~s, expected ~s, got ~s"
-        test-id expected-output (get-string)))))
-
 (define (emit . args)
   (apply fprintf (compile-port) args)
   (newline (compile-port)))
