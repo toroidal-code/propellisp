@@ -1,6 +1,5 @@
-#include <simpletools.h>                     // Include simple tools
+#include <stdio.h>
 #include "runtime.h"
-//#include "ctest.h"
 
 int print_ptr(ptr x) {
     if ((x & FIXNUM_MASK) == LANG_T_FIXNUM) {
