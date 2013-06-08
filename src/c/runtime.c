@@ -37,5 +37,12 @@ int print_ptr(ptr x) {
 
 int main(void) {
     print_ptr(scheme_entry());
+    fflush(stdout);
+
+    //Let's send our term signal
+    printf("%c",0xFF);
+    printf("%c",0x00);
+    printf("%c",0x00);
+    fflush(stdout);
     return 0;
 }

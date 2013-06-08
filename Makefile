@@ -10,5 +10,5 @@ stst.o:
 clean:
 	rm -f stst.o run.elf
 
-run: runtime
-	/opt/parallax/bin/propeller-load -Dreset=dtr -I /opt/parallax/propeller-load/ -b QUICKSTART -p /dev/cu.usbserial-A800HF2M build/run.elf -r -t
+run:
+	/opt/parallax/bin/propeller-load -Dreset=dtr -I /opt/parallax/propeller-load/ -b QUICKSTART -p /dev/cu.usbserial-A800HF2M build/run.elf -r -q -t

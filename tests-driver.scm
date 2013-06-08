@@ -24,7 +24,7 @@
 ;;    (error 'make "could not build target")))
 
 (define (execute)
-  (unless (zero? (system "./bin/stst > stst.out"))
+  (unless (zero? (system "make run | tail -1 > stst.out"))
     (error 'make "produced program exited abnormally")))
 
 
