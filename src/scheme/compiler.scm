@@ -1,7 +1,8 @@
 ;;;;
 ;;
 ;;  <EXPR> -> <Imm>
-;;          | (prim <EXPR)
+;;          | (if <EXPR> <EXPR> <EXPR>)
+;;          | (prim <EXPR>)
 ;;  <Imm>  -> fixnum | boolean | char | null
 
 
@@ -57,12 +58,16 @@
 
 (define (emit-immediate x)
   (unless (immediate? x) (error 'emit-program "value must be an immediate"))
-  (emit "        mov	r0, #~a" (immediate-rep x)))
+  (let ((rep (immediate-rep x)))
+    (cond
+      ((and (< rep 511)  (> rep 0)) (emit "        mov  r0, #~a" rep))           ;; 0 < x < 511
+      ((and (> rep -512) (< rep 0)) (emit "        neg  r0, #~a" (abs rep)))     ;; -512 < x < 0
+      (else                         (emit "        mvi	r0, #~a" rep)))))        ;; all others
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-;;  Primirive Handlers
+;;  Primitive Handlers
 ;;
 (define-syntax define-primitive
   (syntax-rules ()
@@ -124,8 +129,6 @@
 
 (define-primitive ($fxzero? arg)
   (emit-expr arg)
-  (emit "        mov	r0, r0")
-  (emit "        and	r0, __MASK_000000FF") ;;get the lower byte
   (emit "        cmp	r0, #~s wz" fixnum-tag)
   (emit-predicate))
 
@@ -157,11 +160,83 @@
   (emit "        cmp	r0, #~s wz" boolean-f)
   (emit-predicate))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;;  (Conditionals)
+;;
+(define unique-label
+  (let ((count 0))
+    (lambda ()
+      (let ((label (format ".L~s" count)))
+        (set! count (add1 count))
+        label))))
 
+(define (if? expr)
+  (and (list? expr) (eq? (car expr) 'if) (= 4 (length expr))))
+
+(define (if-test expr)
+  (cadr expr))
+
+(define (if-conseq expr)
+  (caddr expr))
+
+(define (if-altern expr)
+  (cadddr expr))
+
+(define (emit-if expr)
+  (let ((alt-label (unique-label))
+        (end-label (unique-label)))
+    (emit-expr (if-test expr))
+    (emit "        cmp  r0, #~s wz" boolean-f)
+    (emit "        IF_E brs #~a" alt-label)
+    (emit-expr (if-conseq expr))
+    (emit "        brs #~a" end-label)
+    (emit "~a" alt-label)
+    (emit-expr (if-altern expr))
+    (emit "~a" end-label)))
+
+(define (emit-jump-block expr jump label)
+  (let ((head (car expr)) (rest (cdr expr)))
+    (emit-expr head)
+    (emit "        cmp  r0, #~s wz" boolean-f)
+    (emit "        ~a brs #~a"  jump label)
+    (unless (null? rest)
+      (emit-jump-block rest jump label))))
+
+(define (emit-conditional-block default jump)
+  (lambda (expr)
+    (case (length expr)
+      ((1) (emit-immediate default))
+      ((2) (emit-expr (cadr expr)))
+      (else
+       (let ((end-label (unique-label)))
+         (emit-jump-block (cdr expr) jump end-label)
+         (emit "~a" end-label))))))
+
+(define (and? expr)
+  (and (list? expr) (eq? (car expr) 'and)))
+
+(define emit-and
+  (emit-conditional-block #t "IF_E"))
+
+(define (or? expr)
+  (and (list? expr) (eq? (car expr) 'or)))
+
+(define emit-or
+  (emit-conditional-block #f "IF_NE"))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;;  (emit expressions)
+;;
 (define (emit-expr expr)
   (cond
    ((immediate? expr) (emit-immediate expr))
-   ((primcall? expr) (emit-primcall expr))
+   ((if? expr)        (emit-if expr))
+   ((and? expr)       (emit-and expr))
+   ((or? expr)        (emit-or expr))
+   ((primcall? expr)  (emit-primcall expr))
    (else (error 'emit-expr (format "~s is not a valid expression" expr)))))
 
 (define (emit-function-header f)

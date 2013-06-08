@@ -15,6 +15,8 @@ CMM = /opt/parallax/Workspace/Learn/Simple\ Libraries/Utility/libsimpletools/cmm
 
 VPATH=$(SRCROOT):$(INCROOT):$(TSTROOT):$(OBJROOT)
 
+.PHONY: all clean test_clean
+
 all: stst.elf
 
 runtime.o: runtime.c runtime.h
@@ -34,3 +36,5 @@ clean test_clean:
 	$(RM) $(OBJROOT)/*.o
 	$(RM) $(BINROOT)/*.elf
 	$(RM) stst.out
+
+.SILENT: stst.o stst.elf test_clean
