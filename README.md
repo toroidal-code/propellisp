@@ -7,11 +7,11 @@ Scheme for the Propeller 32-bit 8-core MCU.
 This is a simple (for now) compiler for Scheme that targets the Propeller MCU. The compiler is written in Petite Chez Scheme. Currently, I am following the paper Compilers: A Backend to Frontend and Back to Front Again.
 
 ##Why?
-Because currently, Propeller development is limited to Spin, PASM (both daunting for beginners), and C/C++ using the new propgcc compiler. I wanted to make something that made Propeller devlopment fun and easy, the way I remember Arduino before I learned C++.  
-Lisp (e.g. Scheme) is very easy for beginners to learn, and provides a great degree of flexibility 
+Because currently, Propeller development is limited to Spin, PASM (both daunting for beginners), and C/C++ using the new propgcc compiler. I wanted to make something that made Propeller devlopment fun and easy, the way Arduino attempts. Lisp (e.g. Scheme) is very easy for beginners to learn, and provides a great degree of flexibility 
 
 ##Prerequisites
-[propgcc](https://code.google.com/p/propgcc/) is used for compiling the emitted assembly and the debug C code together. The makefile assumes that this is in the recommended location,`/opt/parallax/` 
+[propgcc](https://code.google.com/p/propgcc/) is used for compiling the emitted assembly and the debug C code together. The makefile assumes that this is in the recommended location,`/opt/parallax/`   
+[Petite Chez Scheme](http://www.scheme.com/petitechezscheme.html) is used for the backend and assembly emission process.
 
 ##Using it
 Clone the repository, `cd` into it, and in a Petite REPL do
