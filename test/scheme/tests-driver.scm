@@ -59,7 +59,7 @@
      [(string) (test-with-string-output test-id expr out #f)]
      [else (error 'test (format "invalid test type ~s" type))])
     (printf "passed\n")
-    (printf "test ~s : cog : ~s ...　" test-id expr)
+    (printf "test ~s : cog : ~s  ...　" test-id expr)
     (flush-output-port)
     (case type
      [(string) (test-with-string-output test-id expr out #t)]

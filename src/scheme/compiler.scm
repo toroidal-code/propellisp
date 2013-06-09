@@ -178,6 +178,12 @@
 ;;
 ;;  (Conditionals)
 ;;
+
+(define (mem-jump)
+	(if cog
+		"jmp"
+		"brs"))
+
 (define unique-label
   (let ((count 0))
     (lambda ()
@@ -202,29 +208,30 @@
         (end-label (unique-label)))
     (emit-expr (if-test expr))
     (emit "        cmp	r7, #~s wz" boolean-f)
-    (emit "        IF_E brs #~a" alt-label)
+    (emit "        IF_E ~a #~a" (mem-jump) alt-label)
     (emit-expr (if-conseq expr))
-    (emit "        brs #~a" end-label)
+    (emit "        ~a #~a" (mem-jump) end-label)
     (emit "~a" alt-label)
     (emit-expr (if-altern expr))
     (emit "~a" end-label)))
 
-(define (emit-jump-block expr jump label)
-  (let ((head (car expr)) (rest (cdr expr)))
+(define (emit-jump-block expr condition label)
+  (let ((head (car expr)) 
+        (rest (cdr expr)))
     (emit-expr head)
     (emit "        cmp	r7, #~s wz" boolean-f)
-    (emit "        ~a brs #~a"  jump label)
+    (emit "        ~a ~a #~a" condition (mem-jump) label)
     (unless (null? rest)
-            (emit-jump-block rest jump label))))
+            (emit-jump-block rest condition label))))
 
-(define (emit-conditional-block default jump)
+(define (emit-conditional-block default condition)
   (lambda (expr)
     (case (length expr)
       ((1) (emit-immediate default))
       ((2) (emit-expr (cadr expr)))
       (else
        (let ((end-label (unique-label)))
-         (emit-jump-block (cdr expr) jump end-label)
+         (emit-jump-block (cdr expr) condition end-label)
          (emit "~a" end-label))))))
 
 (define (and? expr)
