@@ -86,11 +86,11 @@
 ;;
 (define-syntax define-primitive
   (syntax-rules ()
-    ((_ (prim-name arg* ...) b b* ...)
+    ((_ (prim-name si arg* ...) b b* ...)
      (begin
        (putprop 'prim-name '*is-prim* #t)
        (putprop 'prim-name '*arg-count* (length '(arg* ...)))
-       (putprop 'prim-name '*emitter* (lambda (arg* ...) b b* ...))))))
+       (putprop 'prim-name '*emitter* (lambda (si arg* ...) b b* ...))))))
 
 (define (primitive? x)
   (and (symbol? x) (getprop x '*is-prim*)))
@@ -105,68 +105,68 @@
 (define (check-primcall-args prim args)
   (= (getprop prim '*arg-count*) (length args)))
 
-(define (emit-primcall expr)
+(define (emit-primcall si expr)
   (let ([prim (car expr)] [args (cdr expr)])
     (check-primcall-args prim args)
-    (apply (primitive-emitter prim) args)))
+    (apply (primitive-emitter prim) si args)))
 
-(define (emit-predicate)
-  (emit "        IF_E	mov	r7, #~s" boolean-t)
+(define (emit-predicate . args)
+  (emit "        IF_E	mov	r7, #~s" boolean-t) ;;TODO
   (emit "        IF_NE	mov	r7, #~s" boolean-f))
 
-(define-primitive ($fxadd1 arg)
-  (emit-expr arg)
+(define-primitive ($fxadd1 si arg)
+  (emit-expr si arg)
   (emit "        add	r7, #~s" (immediate-rep 1)))
 
-(define-primitive ($fxsub1 arg)
-  (emit-expr arg)
+(define-primitive ($fxsub1 si arg)
+  (emit-expr si arg)
   (emit "        sub	r7, #~s" (immediate-rep 1)))
 
-(define-primitive ($fixnum->char arg)
-  (emit-expr arg)
+(define-primitive ($fixnum->char si arg)
+  (emit-expr si arg)
   (emit "        shl	r7, #~s" (- char-shift fixnum-shift))
   (emit "        or 	r7, #~s" char-tag))
 
 (define-primitive ($char->fixnum arg)
-  (emit-expr arg)
+  (emit-expr si arg)
   (emit "        shr	r7,	#~s" (- char-shift fixnum-shift)))
 
 (define-primitive ($fxlognot arg)
-  (emit-expr arg)
+  (emit-expr si arg)
   (emit "        shr	r7, #~s" fixnum-shift)
   (emit "        xor	r7, __MASK_FFFFFFFF") ;; not operator
   (emit "        shl	r7, #~s" fixnum-shift))
 
-(define-primitive ($fxzero? arg)
-  (emit-expr arg)
+(define-primitive ($fxzero? si arg)
+  (emit-expr si arg)
   (emit "        cmp	r7, #~s wz" fixnum-tag)
   (emit-predicate))
 
-(define-primitive (fixnum? arg)
-  (emit-expr arg)
+(define-primitive (fixnum? si arg)
+  (emit-expr si arg)
   (emit "        and	r7, #~s" fixnum-mask)
   (emit "        cmp	r7, #~s wz" fixnum-tag)
   (emit-predicate))
 
-(define-primitive (null? arg)
-  (emit-expr arg)
+(define-primitive (null? si arg)
+  (emit-expr si arg)
   (emit "        cmp	r7, #~s wz" nil)
   (emit-predicate))
 
-(define-primitive (boolean? arg)
-  (emit-expr arg)
+(define-primitive (boolean? si arg)
+  (emit-expr si arg)
   (emit "        and	r7, #~s" boolean-mask)
   (emit "        cmp	r7, #~s wz" boolean-f)
   (emit-predicate))
 
-(define-primitive (char? arg)
-  (emit-expr arg)
+(define-primitive (char? si arg)
+  (emit-expr si arg)
   (emit "        and	r7, #~s" char-mask)
   (emit "        cmp	r7, #~s wz" char-tag)
   (emit-predicate))
 
-(define-primitive (not arg)
-  (emit-expr arg)
+(define-primitive (not si arg)
+  (emit-expr si arg)
   (emit "        cmp	r7, #~s wz" boolean-f)
   (emit-predicate))
 
@@ -199,35 +199,35 @@
 (define (if-altern expr)
   (cadddr expr))
 
-(define (emit-if expr)
+(define (emit- si expr)
   (let ([alt-label (unique-label)]
         [end-label (unique-label)])
-    (emit-expr (if-test expr))
+    (emit-expr si (if-test expr))
     (emit "        cmp	r7, #~s wz" boolean-f)
     (emit "        IF_E ~a #~a" (mem-jump) alt-label)
-    (emit-expr (if-conseq expr))
+    (emit-expr si (if-conseq expr))
     (emit "        ~a #~a" (mem-jump) end-label)
     (emit "~a" alt-label)
-    (emit-expr (if-altern expr))
+    (emit-expr si (if-altern expr))
     (emit "~a" end-label)))
 
-(define (emit-jump-block expr condition label)
+(define (emit-jump-block si expr condition label)
   (let ([head (car expr)] 
         [rest (cdr expr)])
-    (emit-expr head)
+    (emit-expr si head)
     (emit "        cmp	r7, #~s wz" boolean-f)
     (emit "        ~a ~a #~a" condition (mem-jump) label)
     (unless (null? rest)
-            (emit-jump-block rest condition label))))
+            (emit-jump-block si rest condition label))))
 
 (define (emit-conditional-block default condition)
-  (lambda (expr)
+  (lambda (si expr)
     (case (length expr)
       [(1) (emit-immediate default)]
-      [(2) (emit-expr (cadr expr))]
+      [(2) (emit-expr si (cadr expr))]
       [else
        (let ((end-label (unique-label)))
-         (emit-jump-block (cdr expr) condition end-label)
+         (emit-jump-block si (cdr expr) condition end-label)
          (emit "~a" end-label))])))
 
 (define (and? expr)
@@ -242,42 +242,36 @@
 (define emit-or
   (emit-conditional-block #f "IF_NE"))
 
+;;
+;; 1.5 Binary Primitives
+;;
+(define (emit-label f)
+  (emit "_~a" f))
+
+
+
+;; (define-primitive (fx+ si arg1 arg2)
+;;   (emit-expr si arg1)
+;;   (emit "        "))
+
 
 ;;
 ;;  Compiler
 ;;
-(define (emit-expr expr)
+(define (emit-expr si expr)
   (cond
    ((immediate? expr) (emit-immediate expr))
-   ((if? expr)        (emit-if expr))
-   ((and? expr)       (emit-and expr))
-   ((or? expr)        (emit-or expr))
-   ((primcall? expr)  (emit-primcall expr))
+   ((if? expr)        (emit-if si expr))
+   ((and? expr)       (emit-and si expr))
+   ((or? expr)        (emit-or si expr))
+   ((primcall? expr)  (emit-primcall si expr))
    (else (error 'emit-expr (format "~s is not a valid expression" expr)))))
 
 (define (emit-function-header f)
   (emit "        .text")
   (emit "        .balign 4")
   (emit "        .global _~a" f)
-  (emit "_~a" f))
-
-
-(define (emit-hub-function-header f)
-  (emit "        .text")
-  (emit "        .balign 4")
-  (emit "        .global _~a" f)
-  (emit "_~a" f)
-  (emit "        sub	sp, #4")
-  (emit "        mov	r7, sp")
-  (emit "        wrlong	r0, r7")
-  (emit "        mov	r7, sp")
-  (emit "        rdlong	r7, r7"))
-
-
-(define (emit-cog-function-header)
-  (emit "        .text")
-  (emit "        .global _~a" f)
-  (emit "_~a" f))
+  (emit-label f))
 
 (define (emit-function-footer)
   (emit "        mov	r0, r7"))
@@ -285,7 +279,6 @@
 (define (emit-hub-function-footer)
 ;;  (emit "        add	sp, #4")
   (emit-function-footer)
-  ;;(emit "        lret")
   (emit "        mov	pc, lr"))
 
 (define (emit-cog-function-footer)
@@ -294,14 +287,30 @@
 
 (define cog #f)
 
-(define (emit-program x)
+(define (emit-program expr)
   (set! cog #f)
   (emit-function-header "scheme_entry")
-  (emit-expr x)
+  (emit "        sub	sp, #~a" wordsize)
+  (emit "        mov	r7, sp")
+  (emit "        wrlong	r0, r7")
+  (emit "        mov	r7, sp")
+  (emit "        rdlong	r7, r7")
+  ; (emit "        ~a 	_L_scheme_entry" (mem-jump))
+  ; (emit-label "L_scheme_entry")
+  (emit-expr (- wordsize) expr)
+  (emit "        add  sp, #~a" wordsize)
   (emit-hub-function-footer))
 
-(define (emit-cog-program x)
+(define (emit-cog-program expr)
   (set! cog #t)
   (emit-function-header "scheme_entry")
-  (emit-expr x)
+  (emit "        sub	sp, #~a" wordsize)
+  (emit "        mov	r7, sp")
+  (emit "        wrlong	r0, r7")
+  (emit "        mov	r7, sp")
+  (emit "        rdlong	r7, r7")
+  ; (emit "        ~a 	_L_scheme_entry" (mem-jump))
+  ; (emit-label "L_scheme_entry")
+  (emit-expr (- wordsize) expr)
+  (emit "        add  sp, #~a" wordsize)
   (emit-cog-function-footer))
