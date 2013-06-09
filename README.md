@@ -49,5 +49,5 @@ Tests can be run (with a Propeller attached) using `petite run-tests.scm`
 All code is hereby released under MIT License.
 
 ###Special Thanks
-Thanks to [Zachary Elliot](@zellio), for answering all my questions, giving me tips on construction, and providing an impressive compiler for basing my work on.
+Thanks to [Zachary Elliot](https://github.com/zellio), for answering all my questions, giving me tips on construction, and providing an impressive compiler for basing my work on.
 
