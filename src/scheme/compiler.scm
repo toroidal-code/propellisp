@@ -56,13 +56,28 @@
    ((char? x) (logor (ash (char->integer x) char-shift) char-tag))
    (else #f)))
 
+(define unique-constant-label
+  (let ((count 0))
+    (lambda ()
+      (let ((label (format ".LC~s" count)))
+        (set! count (add1 count))
+        label))))
+
+
 (define (emit-immediate x)
   (unless (immediate? x) (error 'emit-program "value must be an immediate"))
   (let ((rep (immediate-rep x)))
     (cond
-      ((and (< rep 511)  (> rep 0)) (emit "        mov  r0, #~a" rep))           ;; 0 < x < 511
-      ((and (> rep -512) (< rep 0)) (emit "        neg  r0, #~a" (abs rep)))     ;; -512 < x < 0
-      (else                         (emit "        mvi	r0, #~a" rep)))))        ;; all others
+     ((and (< rep 511)  (>= rep 0)) (emit "        mov	r7, #~a" rep))           ;; 0 <= x < 511
+     ((and (> rep -512) (< rep 0)) (emit "        neg	r7, #~a" (abs rep)))     ;; -512 < x < 0
+     (else  
+      (if cog
+          (let ((const-label (unique-constant-label)))
+            (emit     "        mov	r7, ~a" const-label)
+            (emit-end "        .balign 4")
+            (emit-end "~a" const-label)
+            (emit-end "        long	~a" rep))
+          (emit "        mvi	r7, #~a" rep))))))        ;; all others
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -75,8 +90,7 @@
      (begin
        (putprop 'prim-name '*is-prim* #t)
        (putprop 'prim-name '*arg-count* (length '(arg* ...)))
-       (putprop 'prim-name '*emitter* (lambda (arg* ...) b b* ...))))
-    ))
+       (putprop 'prim-name '*emitter* (lambda (arg* ...) b b* ...))))))
 
 (define (primitive? x)
   (and (symbol? x) (getprop x '*is-prim*)))
@@ -97,8 +111,8 @@
     (apply (primitive-emitter prim) args)))
 
 (define (emit-predicate)
-  (emit "        IF_E	mov	r0, #~s" boolean-t)
-  (emit "        IF_NE	mov	r0, #~s" boolean-f))
+  (emit "        IF_E	mov	r7, #~s" boolean-t)
+  (emit "        IF_NE	mov	r7, #~s" boolean-f))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -106,58 +120,58 @@
 ;;
 (define-primitive ($fxadd1 arg)
   (emit-expr arg)
-  (emit "        add	r0, #~s" (immediate-rep 1)))
+  (emit "        add	r7, #~s" (immediate-rep 1)))
 
 (define-primitive ($fxsub1 arg)
   (emit-expr arg)
-  (emit "        sub	r0, #~s" (immediate-rep 1)))
+  (emit "        sub	r7, #~s" (immediate-rep 1)))
 
 (define-primitive ($fixnum->char arg)
   (emit-expr arg)
-  (emit "        shl	r0, #~s" (- char-shift fixnum-shift))
-  (emit "        or		r0, #~s" char-tag))
+  (emit "        shl	r7, #~s" (- char-shift fixnum-shift))
+  (emit "        or 	r7, #~s" char-tag))
 
 (define-primitive ($char->fixnum arg)
   (emit-expr arg)
-  (emit "        shr	r0,	#~s" (- char-shift fixnum-shift)))
+  (emit "        shr	r7,	#~s" (- char-shift fixnum-shift)))
 
 (define-primitive ($fxlognot arg)
   (emit-expr arg)
-  (emit "        shr	r0, #~s" fixnum-shift)
-  (emit "        xor	r0, __MASK_FFFFFFFF") ;; not operator
-  (emit "        shl	r0, #~s" fixnum-shift))
+  (emit "        shr	r7, #~s" fixnum-shift)
+  (emit "        xor	r7, __MASK_FFFFFFFF") ;; not operator
+  (emit "        shl	r7, #~s" fixnum-shift))
 
 (define-primitive ($fxzero? arg)
   (emit-expr arg)
-  (emit "        cmp	r0, #~s wz" fixnum-tag)
+  (emit "        cmp	r7, #~s wz" fixnum-tag)
   (emit-predicate))
 
 (define-primitive (fixnum? arg)
   (emit-expr arg)
-  (emit "        and	r0, #~s" fixnum-mask)
-  (emit "        cmp	r0, #~s wz" fixnum-tag)
+  (emit "        and	r7, #~s" fixnum-mask)
+  (emit "        cmp	r7, #~s wz" fixnum-tag)
   (emit-predicate))
 
 (define-primitive (null? arg)
   (emit-expr arg)
-  (emit "        cmp	r0, #~s wz" nil)
+  (emit "        cmp	r7, #~s wz" nil)
   (emit-predicate))
 
 (define-primitive (boolean? arg)
   (emit-expr arg)
-  (emit "        and	r0, #~s" boolean-mask)
-  (emit "        cmp	r0, #~s wz" boolean-f)
+  (emit "        and	r7, #~s" boolean-mask)
+  (emit "        cmp	r7, #~s wz" boolean-f)
   (emit-predicate))
 
 (define-primitive (char? arg)
   (emit-expr arg)
-  (emit "        and	r0, #~s" char-mask)
-  (emit "        cmp	r0, #~s wz" char-tag)
+  (emit "        and	r7, #~s" char-mask)
+  (emit "        cmp	r7, #~s wz" char-tag)
   (emit-predicate))
 
 (define-primitive (not arg)
   (emit-expr arg)
-  (emit "        cmp	r0, #~s wz" boolean-f)
+  (emit "        cmp	r7, #~s wz" boolean-f)
   (emit-predicate))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -187,7 +201,7 @@
   (let ((alt-label (unique-label))
         (end-label (unique-label)))
     (emit-expr (if-test expr))
-    (emit "        cmp  r0, #~s wz" boolean-f)
+    (emit "        cmp	r7, #~s wz" boolean-f)
     (emit "        IF_E brs #~a" alt-label)
     (emit-expr (if-conseq expr))
     (emit "        brs #~a" end-label)
@@ -198,10 +212,10 @@
 (define (emit-jump-block expr jump label)
   (let ((head (car expr)) (rest (cdr expr)))
     (emit-expr head)
-    (emit "        cmp  r0, #~s wz" boolean-f)
+    (emit "        cmp	r7, #~s wz" boolean-f)
     (emit "        ~a brs #~a"  jump label)
     (unless (null? rest)
-      (emit-jump-block rest jump label))))
+            (emit-jump-block rest jump label))))
 
 (define (emit-conditional-block default jump)
   (lambda (expr)
@@ -240,12 +254,52 @@
    (else (error 'emit-expr (format "~s is not a valid expression" expr)))))
 
 (define (emit-function-header f)
-	(emit "        .text")
-	(emit "        .balign 4")
-	(emit "        .global _~a" f)
-	(emit "_~a" f))
+  (emit "        .text")
+  (emit "        .balign 4")
+  (emit "        .global _~a" f)
+  (emit "_~a" f))
+
+
+(define (emit-hub-function-header f)
+  (emit "        .text")
+  (emit "        .balign 4")
+  (emit "        .global _~a" f)
+  (emit "_~a" f)
+  (emit "        sub	sp, #4")
+  (emit "        mov	r7, sp")
+  (emit "        wrlong	r0, r7")
+  (emit "        mov	r7, sp")
+  (emit "        rdlong	r7, r7"))
+
+
+(define (emit-cog-function-header)
+  (emit "        .text")
+  (emit "        .global _~a" f)
+  (emit "_~a" f))
+
+(define (emit-function-footer)
+  (emit "        mov	r0, r7"))
+
+(define (emit-hub-function-footer)
+;;  (emit "        add	sp, #4")
+  (emit-function-footer)
+  ;;(emit "        lret")
+  (emit "        mov	pc, lr"))
+
+(define (emit-cog-function-footer)
+  (emit-function-footer)
+  (emit "        jmp lr"))
+
+(define cog #f)
 
 (define (emit-program x)
+  (set! cog #f)
   (emit-function-header "scheme_entry")
   (emit-expr x)
-  (emit "        mov	pc,lr"))
+  (emit-hub-function-footer))
+
+(define (emit-cog-program x)
+  (set! cog #t)
+  (emit-function-header "scheme_entry")
+  (emit-expr x)
+  (emit-cog-function-footer))

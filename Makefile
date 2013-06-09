@@ -3,6 +3,8 @@ RM = rm -Rf
 
 LDFLAGS =
 
+CFLAGS = -mfcache -fno-exceptions -m32bit-doubles -std=c99
+
 SRCROOT = src/c/src
 INCROOT = src/c/include
 TSTROOT = test/c
@@ -17,16 +19,24 @@ VPATH=$(SRCROOT):$(INCROOT):$(TSTROOT):$(OBJROOT)
 all: stst.elf
 
 runtime.o: runtime.c runtime.h
-	$(CC) -c -I$(INCROOT) -std=c99  -o $(OBJROOT)/$(@) $(<)
+	$(CC) $(CFLAGS) -c -I$(INCROOT) -o $(OBJROOT)/$(@) $(<) -Os $(MEMORY)
 
 stst.o: stst.s
-	$(CC) -c -o $(OBJROOT)/$(@) $(<)
+	$(CC) -c -o $(OBJROOT)/$(@) $(<) $(MEMORY)
 
 stst.elf: runtime.o stst.o
-	$(CC) $(OBJROOT)/stst.o $(OBJROOT)/runtime.o  -o $(BINROOT)/$(@)
+	$(CC) $(OBJROOT)/stst.o $(OBJROOT)/runtime.o  -o $(BINROOT)/$(@) $(MEMORY)
 
-run: all
+run:
 	/opt/parallax/bin/propeller-load -Dreset=dtr -I /opt/parallax/propeller-load bin/stst.elf -r -q -t
+
+hub: MEMORY=-mlmm
+hub: all
+hubrun: hub run
+
+cog: MEMORY=-mcog
+cog: all
+cogrun: cog run 
 
 clean test_clean:
 	$(RM) $(OBJROOT)/*.s
@@ -34,4 +44,4 @@ clean test_clean:
 	$(RM) $(BINROOT)/*.elf
 	$(RM) stst.out
 
-.SILENT: stst.o stst.elf test_clean
+#.SILENT: stst.o stst.elf test_clean
