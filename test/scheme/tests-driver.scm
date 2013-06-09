@@ -1,4 +1,3 @@
-
 (define all-tests '())
 
 (define (compile-program x)
@@ -15,21 +14,21 @@
            '(test-name [expr string  output-string] ...)
             all-tests))]))
 
-(define (build);; cog)
-  ;;(if cog
-    ;;(unless (zero? (system "make cog"))
-      ;;(error 'make "could not build target"))
+(define (build cog)
+  (if cog
+    (unless (zero? (system "make cog"))
+      (error 'make "could not build target"))
     (unless (zero? (system "make hub")) 
-      (error 'make "could not build target")));;)
+      (error 'make "could not build target"))))
 
 (define (execute)
   (unless (zero? (system "make run | tail -1 > stst.out"))
     (error 'make "produced program exited abnormally")))
 
 
-(define (build-program expr)
+(define (build-program cog expr)
    (run-compile expr)
-   (build))
+   (build cog))
 
 (define (get-string)
   (with-output-to-string
@@ -42,9 +41,9 @@
                [(eof-object? c) (void)]
                [else (display c) (f)]))))))))
 
-(define (test-with-string-output test-id expr expected-output) ;; cog)
-   (run-compile expr) ;;(if cog (run-cog-compile expr) (run-compile expr))
-   (build);; cog)
+(define (test-with-string-output test-id expr expected-output cog)
+   (if cog (run-cog-compile expr) (run-compile expr))
+   (build cog)
    (execute)
    (unless (string=? expected-output (get-string))
      (error 'test (format "output mismatch for test ~s, expected ~s, got ~s"
@@ -54,19 +53,18 @@
   (let ([expr (car test)]
         [type (cadr test)]
         [out  (caddr test)])
-    (printf "test ~s:~s hub ..." test-id expr)
+    (printf "test ~s : hub : ~s  ...　" test-id expr)
     (flush-output-port)
     (case type
-     [(string) (test-with-string-output test-id expr out)]
+     [(string) (test-with-string-output test-id expr out #f)]
      [else (error 'test (format "invalid test type ~s" type))])
-    (printf " ok\n")
-    ; (printf "test ~s:~s cog ..." test-id expr)
-    ; (flush-output-port)
-    ; (case type
-    ;  [(string) (test-with-string-output test-id expr out #t)]
-    ;  [else (error 'test (format "invalid test type ~s" type))])
-    ; (printf " ok\n")
-    ))
+    (printf "passed\n")
+    (printf "test ~s : cog : ~s ...　" test-id expr)
+    (flush-output-port)
+    (case type
+     [(string) (test-with-string-output test-id expr out #t)]
+     [else (error 'test (format "invalid test type ~s" type))])
+    (printf "passed\n")))
 
 (define (test-all)
   (let f ([i 0] [ls (reverse all-tests)])

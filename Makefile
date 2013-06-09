@@ -31,17 +31,20 @@ run:
 	/opt/parallax/bin/propeller-load -Dreset=dtr -I /opt/parallax/propeller-load bin/stst.elf -r -q -t
 
 hub: MEMORY=-mlmm
-hub: all
+hub: runtime_clean  all
 hubrun: hub run
 
 cog: MEMORY=-mcog
-cog: all
+cog: runtime_clean all
 cogrun: cog run 
 
-clean test_clean:
+clean test_clean: runtime_clean
 	$(RM) $(OBJROOT)/*.s
 	$(RM) $(OBJROOT)/*.o
 	$(RM) $(BINROOT)/*.elf
 	$(RM) stst.out
 
-.SILENT: stst.o stst.elf test_clean
+runtime_clean:
+	$(RM) $(OBJROOT)/runtime.o
+
+.SILENT: stst.o runtime.o stst.elf test_clean runtime_clean

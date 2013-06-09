@@ -5,3 +5,4 @@
 (test-all)
 
 (system "make test_clean")
+(exit)
