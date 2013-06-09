@@ -34,13 +34,13 @@ Tests can be run (with a Propeller attached) using `petite run-tests.scm`
 - 1.3: Unary Primitives (e.g. `(fixnum? 42) `)
 - 1.4: Conditional Expressions: if, and, or
 
-##Currently
+##Currently in progress
 - 1.5: Binary Primitives (e.g. `(fx+ 32 4)`)
+- Cog mode support (-mcog) for running a program completely on a cog. [Read more here](https://code.google.com/p/propgcc/wiki/PropGccInDepth#Memory_Models_and_Mixed-Mode_Programming)
 
 
 ##Todo 
 ####(beyond the scope of the paper)
-- Cog mode support (-mcog) for running a program completely on a cog. [Read more here](https://code.google.com/p/propgcc/wiki/PropGccInDepth#Memory_Models_and_Mixed-Mode_Programming)
 - Branch for the Propeller II. This includes re-vamping the stack architecture to utilise the new built-in stack memory
 - Pin twiddling support with an Arduino-like syntax.
 - Threading using `COGNEW`, `COGINIT`, and the in-built semaphores. This will lead to true concurrent operations, such as large array sorting
