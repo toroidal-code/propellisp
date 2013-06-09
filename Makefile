@@ -44,4 +44,4 @@ clean test_clean:
 	$(RM) $(BINROOT)/*.elf
 	$(RM) stst.out
 
-#.SILENT: stst.o stst.elf test_clean
+.SILENT: stst.o stst.elf test_clean
