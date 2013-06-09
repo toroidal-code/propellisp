@@ -127,11 +127,11 @@
   (emit "        shl	r7, #~s" (- char-shift fixnum-shift))
   (emit "        or 	r7, #~s" char-tag))
 
-(define-primitive ($char->fixnum arg)
+(define-primitive ($char->fixnum si arg)
   (emit-expr si arg)
   (emit "        shr	r7,	#~s" (- char-shift fixnum-shift)))
 
-(define-primitive ($fxlognot arg)
+(define-primitive ($fxlognot si arg)
   (emit-expr si arg)
   (emit "        shr	r7, #~s" fixnum-shift)
   (emit "        xor	r7, __MASK_FFFFFFFF") ;; not operator
@@ -199,7 +199,7 @@
 (define (if-altern expr)
   (cadddr expr))
 
-(define (emit- si expr)
+(define (emit-if si expr)
   (let ([alt-label (unique-label)]
         [end-label (unique-label)])
     (emit-expr si (if-test expr))
