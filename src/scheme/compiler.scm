@@ -1,12 +1,13 @@
-;;;;
 ;;
 ;;  <EXPR> -> <Imm>
-;;          | (if <EXPR> <EXPR> <EXPR>)
-;;          | (prim <EXPR>)
+;;          | (prim <Expr>)
+;;          | (if <Expr> <Expr> <Expr>)
+;;          | (and <Expr>* ...)
+;;          | (or <Expr>* ...)
 ;;  <Imm>  -> fixnum | boolean | char | null
+;;
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;;  Constants
 ;;
@@ -41,9 +42,9 @@
   (and (integer? x) (exact? x) (<= fixnum-lower-bound x fixnum-upper-bound)))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-;;  Immediate handlers
+;; 1.1 Integers
+;; 1.2 Immediate Constants
 ;;
 (define (immediate? x)
   (or (fixnum? x) (boolean? x) (null? x) (char? x)))
@@ -59,20 +60,20 @@
 (define unique-constant-label
   (let ((count 0))
     (lambda ()
-      (let ((label (format ".LC~s" count)))
+      (let ([label (format ".LC~s" count)])
         (set! count (add1 count))
         label))))
 
 
 (define (emit-immediate x)
   (unless (immediate? x) (error 'emit-program "value must be an immediate"))
-  (let ((rep (immediate-rep x)))
+  (let ([rep (immediate-rep x)])
     (cond
      ((and (< rep 511)  (>= rep 0)) (emit "        mov	r7, #~a" rep))           ;; 0 <= x < 511
      ((and (> rep -512) (< rep 0)) (emit "        neg	r7, #~a" (abs rep)))     ;; -512 < x < 0
      (else  
       (if cog
-          (let ((const-label (unique-constant-label)))
+          (let ([const-label (unique-constant-label)])
             (emit     "        mov	r7, ~a" const-label)
             (emit-end "        .balign 4")
             (emit-end "~a" const-label)
@@ -80,9 +81,8 @@
           (emit "        mvi	r7, #~a" rep))))))        ;; all others
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-;;  Primitive Handlers
+;;  1.3 Unary Primitives
 ;;
 (define-syntax define-primitive
   (syntax-rules ()
@@ -114,10 +114,6 @@
   (emit "        IF_E	mov	r7, #~s" boolean-t)
   (emit "        IF_NE	mov	r7, #~s" boolean-f))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-;;  Primative definitions
-;;
 (define-primitive ($fxadd1 arg)
   (emit-expr arg)
   (emit "        add	r7, #~s" (immediate-rep 1)))
@@ -174,9 +170,9 @@
   (emit "        cmp	r7, #~s wz" boolean-f)
   (emit-predicate))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;;
-;;  (Conditionals)
+;;  1.4 Conditional Expressions
 ;;
 
 (define (mem-jump)
@@ -187,7 +183,7 @@
 (define unique-label
   (let ((count 0))
     (lambda ()
-      (let ((label (format ".L~s" count)))
+      (let ([label (format ".L~s" count)])
         (set! count (add1 count))
         label))))
 
@@ -204,8 +200,8 @@
   (cadddr expr))
 
 (define (emit-if expr)
-  (let ((alt-label (unique-label))
-        (end-label (unique-label)))
+  (let ([alt-label (unique-label)]
+        [end-label (unique-label)])
     (emit-expr (if-test expr))
     (emit "        cmp	r7, #~s wz" boolean-f)
     (emit "        IF_E ~a #~a" (mem-jump) alt-label)
@@ -216,8 +212,8 @@
     (emit "~a" end-label)))
 
 (define (emit-jump-block expr condition label)
-  (let ((head (car expr)) 
-        (rest (cdr expr)))
+  (let ([head (car expr)] 
+        [rest (cdr expr)])
     (emit-expr head)
     (emit "        cmp	r7, #~s wz" boolean-f)
     (emit "        ~a ~a #~a" condition (mem-jump) label)
@@ -227,12 +223,12 @@
 (define (emit-conditional-block default condition)
   (lambda (expr)
     (case (length expr)
-      ((1) (emit-immediate default))
-      ((2) (emit-expr (cadr expr)))
-      (else
+      [(1) (emit-immediate default)]
+      [(2) (emit-expr (cadr expr))]
+      [else
        (let ((end-label (unique-label)))
          (emit-jump-block (cdr expr) condition end-label)
-         (emit "~a" end-label))))))
+         (emit "~a" end-label))])))
 
 (define (and? expr)
   (and (list? expr) (eq? (car expr) 'and)))
@@ -247,9 +243,8 @@
   (emit-conditional-block #f "IF_NE"))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-;;  (emit expressions)
+;;  Compiler
 ;;
 (define (emit-expr expr)
   (cond
