@@ -13,6 +13,10 @@ Since this is an embedded platform, a great deal of value is placed on the abili
 ##Why?
 Because currently, Propeller development is limited to Spin, PASM (both daunting for beginners), and C/C++ using the new propgcc compiler. I wanted to make something that made Propeller devlopment fun and easy, the way Arduino attempts. Lisp (e.g. Scheme) is very easy for beginners to learn, and provides a great degree of flexibility 
 
+Why the Propeller? I initially tried writing a Scheme compiler for AVR, but was put off by the possible loss of precision due to the 8-bit architecture (16-bit ints become 14-bit fixnums, which can only represent up to 16,384). 
+I've got a couple of Propeller boards in various states, and the Propeller chip (DIP or QFP) is only about $8. That, combined with the novel 8-core architecture, 
+and the recent surge in popularity towards concurrent Lisps (i.e. Clojure) made me decide that the Propeller would be fun to experiment with. 
+
 ##Want to help?
 Try testing out the repository a little. I'm going to make a comprehensive list of things need to be done in the wiki. If you feel up to it, try implementing a feature or two. Pull requests are always more than welcome.
 
