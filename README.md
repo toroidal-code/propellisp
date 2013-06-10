@@ -30,7 +30,7 @@ Clone the repository, `cd` into it, and in a Petite REPL do
 > (run-compile '(some-scheme-code-here))
 > (exit)
 ```
-This creates a stst.s assembly file inside build. Then, run `make run` to compile and run the code.
+This creates a stst.s assembly file inside the `build/` directory. Then, run `make run` to compile and run the code.
 
 ##Testing
 All the automated tests are performed using a method of  
