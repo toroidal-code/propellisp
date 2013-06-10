@@ -108,8 +108,8 @@
   [(fx* -536870911 -1) => "536870911\n"]
   [(fx* 2 (fx* 3 4)) => "24\n"]
   [(fx* (fx* 2 3) 4) => "24\n"]
-  [(fx* (fx* (fx* (fx* (fx* 2 3) 4) 5) 6) 7) => "5040\n"]
-  [(fx* 2 (fx* 3 (fx* 4 (fx* 5 (fx* 6 7))))) => "5040\n"]
+  ;[(fx* (fx* (fx* (fx* (fx* 2 3) 4) 5) 6) 7) => "5040\n"] ;; multiplication is too expensive an operation
+  ;[(fx* 2 (fx* 3 (fx* 4 (fx* 5 (fx* 6 7))))) => "5040\n"] ;; to perform these tests with cog memory
   ; [(fx* (fx* (fx* (fx* 2 3) (fx* 4 5)) (fx* (fx* 6 7) (fx* 8 9))) 
   ;       (fx* (fx* (fx* 2 3) (fx* 2 3)) (fx* (fx* 2 3) (fx* 2 3))))
   ;  => "470292480\n"] 

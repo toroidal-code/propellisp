@@ -276,14 +276,17 @@
 (define (emit-binary-operator si arg1 arg2)
   (emit-expr si arg1)
   ;(emit "	sub	sp, #~s" (abs si))   ;; 'increment' the stack pointer 'down'
-  (emit "	sub	sp, #~s" wordsize)     ;; 'increment' the stack pointer 'down' a single wordlength
-  (emit "	wrlong	r0, sp")           ;; moves first arg to the stack
-  (emit-expr (- si wordsize) arg2)   ;; places value into r0
-  (emit "	rdlong	r1, sp"))          ;; next value to r1)
+  (emit "	mov	si, sp")               ;; move the stack pointer to our scratch area
+  (emit "	sub	si, #~s" (abs si))     ;; 'increment' the stack pointer 'down' a single wordlength
+  (emit "	wrlong	r0, si")           ;; moves first arg to the stack
+  (emit-expr (- si wordsize) arg2)   ;; places arg1 value into r0
+  (emit "	mov	si, sp")               ;; move the stack pointer to our scratch area
+  (emit "	sub	si, #~s" (abs si)) 
+  (emit "	rdlong	r1, si"))          ;; arg0 value to r1)
 
-(define (emit-binary-ending)
+(define (emit-binary-ending) '())
   ;(emit "	add	sp, #~s" (abs si))) ;; 'decrement' the stack pointer 'up'
-  (emit "	add	sp, #~s" wordsize))   ;; 'decrement' the stack pointer 'up' a single wordlength
+  ;;(emit "	add	sp, #~s" wordsize))   ;; 'decrement' the stack pointer 'up' a single wordlength
 
 (define-primitive (fx+ si arg1 arg2)
   (emit-binary-operator si arg1 arg2)
@@ -376,7 +379,8 @@
 (define (emit-function-header f)
   (emit "	.text")
   (emit "	.balign 4")
-  (emit "	.global _~a" f)
+  (emit "	.global si")
+  (emit "si	.global _~a" f)
   (emit-label f))
 
 ; (define (emit-function-footer)
