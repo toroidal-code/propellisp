@@ -116,7 +116,7 @@
 ;;   	(emit " IF_NE	mov	r0, #~s" boolean-f)))
 
 (define (emit-predicate . args)
-  (let ([comparison (car args)]
+  (let ([comparison (if (null? args) 'IF_E (car args))]
         [inverse    'IF_NE])
     (case comparison
       [(IF_E)  (set! inverse 'IF_NE)] 
@@ -334,8 +334,9 @@
 
 (define (define-binary-predicate op si arg1 arg2)
   (emit-binary-operator si arg1 arg2)
-  (emit "	cmps	r1, r0 ~a" (if (or (equal? op 'IF_E) (equal? op 'IF_NE)) 'wz 'wc)) 
-;; since r1 is our first arg, we use that as the basis for comparison
+  ;;cmps is used, as this is the first case where we might deal with 
+  ;;two signed values that _should_ not equal each other
+  (emit "	cmps	r1, r0 wz, wc") ;; since r1 is our first arg, we use that as the basis for comparison
   (emit-predicate op)
   (emit-binary-ending))
 
@@ -344,6 +345,17 @@
 
 (define-primitive (fx< si arg1 arg2)
   (define-binary-predicate 'IF_B si arg1 arg2))
+
+(define-primitive (fx<= si arg1 arg2)
+  (define-binary-predicate 'IF_BE si arg1 arg2))
+
+(define-primitive (fx> si arg1 arg2)
+  (define-binary-predicate 'IF_A si arg1 arg2))
+
+(define-primitive (fx>= si arg1 arg2)
+  (define-binary-predicate 'IF_AE si arg1 arg2))
+
+
 ;;
 ;;  Compiler
 ;;
