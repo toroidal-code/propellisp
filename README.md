@@ -23,7 +23,8 @@ Try testing out the repository a little. I'm going to make a comprehensive list 
 If you find a bug, or have a feature you'd like to see, please report it using the issues.
 
 ##Prerequisites
-[propgcc](https://code.google.com/p/propgcc/) is used for compiling the emitted assembly and the debug C code together. The makefile assumes that this is in the recommended location,`/opt/parallax/`   
+[propgcc](https://code.google.com/p/propgcc/) is used for compiling the emitted [assembly](https://code.google.com/p/propgcc/downloads/detail?name=as.pdf&can=2&q=)
+and the debug C code together. The makefile assumes that this is in the recommended location,`/opt/parallax/`   
 [Petite Chez Scheme](http://www.scheme.com/petitechezscheme.html) is used for the backend and assembly emission process.
 
 ##Using it
