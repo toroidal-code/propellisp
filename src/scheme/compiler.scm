@@ -273,13 +273,13 @@
 (define (emit-binary-operator si env arg1 arg2)
   (emit-expr si env arg1)
   ;(emit "	sub	sp, #~s" (abs si env ))   ;; 'increment' the stack pointer 'down'
-  (emit "	mov	si, sp")               ;; move the stack pointer to our scratch area
-  (emit "	sub	si, #~s" (abs si))     ;; 'increment' the stack pointer 'down' a single wordlength
-  (emit "	wrlong	r0, si")           ;; moves first arg to the stack
+  (emit "	mov	r14, sp")               ;; move the stack pointer to our scratch area
+  (emit "	sub	r14, #~s" (abs si))     ;; 'increment' the stack pointer 'down' a single wordlength
+  (emit "	wrlong	r0, r14")           ;; moves first arg to the stack
   (emit-expr (- si wordsize) env arg2)   ;; places arg1 value into r0
-  (emit "	mov	si, sp")               ;; move the stack pointer to our scratch area
-  (emit "	sub	si, #~s" (abs si)) 
-  (emit "	rdlong	r1, si"))          ;; arg0 value to r1)
+  (emit "	mov	r14, sp")               ;; move the stack pointer to our scratch area
+  (emit "	sub	r14, #~s" (abs si)) 
+  (emit "	rdlong	r1, r14"))          ;; arg0 value to r1)
 
 (define (emit-binary-ending) '())
   ;(emit "	add	sp, #~s" (abs si))) ;; 'decrement' the stack pointer 'up'
@@ -357,6 +357,60 @@
 
 
 ;;
+;; 1.6 Local Variables
+;;
+
+(define variable? symbol?)
+
+(define (emit-stack-load si)
+  (emit "	mov	r14, sp")               ;; move the stack pointer to our scratch area
+  (emit "	sub	r14, #~s" (abs si)) 
+  (emit "	rdlong	r0, r14"))
+
+(define (emit-variable-ref env expr)
+  (let ([pair (assoc expr env)])
+    (if pair (emit-stack-load (cdr pair))
+        (error 'emit-variable-ref (format "Undefined variable: ~s" expr)))))
+
+(define (let? expr)
+  (and (list? expr)
+       (eq? (car expr) 'let)
+       (= (length expr) 3)))
+
+(define let-bindings cadr)
+(define let-body caddr)
+
+(define empty? null?)
+
+(define (emit-stack-save si)
+  (emit "	mov	r14, sp")               ;; move the stack pointer to our scratch area
+  (emit "	sub	r14, #~s" (abs si)) 
+  (emit "	wrlong	r0, r14"))
+
+(define (next-stack-index si) 
+  (- si wordsize))
+
+(define (extend-env var si new-env)
+  (cons (cons var si) new-env))
+
+(define (emit-let si env expr)
+  (define (process-let bindings si new-env)
+    (cond
+     ([empty? bindings] (emit-expr si new-env (let-body expr)))
+     (else
+      (let ([b (car bindings)])
+        (emit-expr si env (cadr b))
+        (emit-stack-save si)
+        (process-let (cdr bindings)
+                     (next-stack-index si)
+                     (extend-env (car b) si new-env))))))
+  (process-let (let-bindings expr) si env))
+
+
+
+
+
+;;
 ;;  Compiler
 ;;
 
@@ -366,18 +420,19 @@
 
 (define (emit-expr si env expr)
   (cond
-   ((immediate? expr) (emit-immediate expr))
-   ((if? expr)	      (emit-if si env expr))
-   ((and? expr)       (emit-and si env expr))
-   ((or? expr)	      (emit-or si env expr))
-   ((primcall? expr)  (emit-primcall si env expr))
+   ([immediate? expr] (emit-immediate expr))
+   ([if? expr]	      (emit-if si env expr))
+   ([and? expr]       (emit-and si env expr))
+   ([or? expr]	      (emit-or si env expr))
+   ([primcall? expr]  (emit-primcall si env expr))
+   ([variable? expr]  (emit-variable-ref env expr))
+   ([let? expr]       (emit-let si env expr))
    (else (error 'emit-expr (format "~s is not a valid expression" expr)))))
 
 (define (emit-function-header f)
   (emit "	.text")
   (emit "	.balign 4")
-  (emit "	.global si")
-  (emit "si	.global _~a" f)
+  (emit "	.global _~a" f)
   (emit-label f))
 
 ; (define (emit-function-footer)
@@ -420,3 +475,4 @@
   (emit-expr (- wordsize) '() expr)
   ; (emit "	add	sp, #~a" wordsize)
   (emit-cog-function-footer))
+
