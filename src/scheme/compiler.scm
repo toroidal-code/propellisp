@@ -443,76 +443,71 @@
       (emit " jmp lr")
       (emit " mov pc,lr")))
 
-(define (letrec? expr)
-  (and (list? expr) (not (null? expr)) (eq? (car expr) 'letrec)))
 
-(define (make-initial-env lvars labels)
-  (map cons lvars labels))
-
-(define call-target car)
-
-(define (app? expr env)
-  (and (list? expr) (not (null? expr)) (assoc (call-target expr) env)))
-
-(define letrec-bindings cadr)
-(define letrec-body caddr)
-
-(define unique-labels
-  (let ([count  0])
-    (lambda (lvars)
-      (map (lambda (lvar)
-             (let ([label (format "_~s_~s" lvar count)])
-               (set! count (add1 count))
-               label))
-           lvars))))
-
-(define lambda-formals cadr)
+(define lambda-fmls cadr)
 (define lambda-body caddr)
-
-(define call-args cdr)
-
-(define (emit-adjust-base si)
-  (unless (= si 0)
-          (cond ((> 0 si) (emit " sub sp, #~s" (abs si)))
-                ((< 0 si) (emit " add sp, #~s" si)))))
-
-(define (emit-app si env expr)
-  (define (emit-arguments si args)
-    (unless (empty? args)
-            (emit-expr si env (car args))
-            (emit-stack-save si)
-            (emit-arguments (- si wordsize) (cdr args))))
-  (emit-arguments (- si wordsize) (call-args expr))
-  (emit-stack-save-from si 'lr) 
-  (emit-adjust-base si)
-  (emit-call (cdr (assoc (call-target expr) env)))
-  (emit-adjust-base (- si))
-  (emit-stack-load-to si 'lr))
 
 (define (emit-lambda env)
   (lambda (expr label)
     (emit-function-header label)
-    (let ([fmls (lambda-formals expr)]
-          [body (lambda-body expr)])
-      (let f ([fmls fmls]
-              [si (- wordsize)]
-              [env env])
+    (let ((fmls (lambda-fmls expr))
+          (body (lambda-body expr)))
+      (let fn ((fmls fmls) (si (next-stack-index 0)) (env env))
         (cond
-         [(empty? fmls) (emit-expr si env body) (emit-ret)]
+         ((null? fmls) (emit-expr si env body) (emit-ret))
          (else
-          (f (cdr fmls)
-             (- si wordsize)
-             (extend-env (car fmls) si env))))))))
+          (fn (cdr fmls) (next-stack-index si) (extend-env (car fmls) si env))))
+        ))
+    ))
 
+(define call-target car)
+(define call-args cdr)
 
-(define (emit-letrec expr si)
-  (let* ([bindings (letrec-bindings expr)]
-         [lvars (map car bindings)]
-         [lambdas (map cadr bindings)]
-         [labels (unique-labels lvars)]
-         [env (make-initial-env lvars labels)])
+(define (apply? expr env)
+  (and (list? expr) (not (null? expr)) (assoc (call-target expr) env)))
+
+(define (emit-adjust-base si)
+  (unless (zero? si)
+          (cond ((> 0 si) (emit " sub sp, #~s" (abs si)))
+                ((< 0 si) (emit " add sp, #~s" si)))))
+
+(define (assoc-val key alist)
+  (cdr (assoc key alist)))
+
+(define (emit-apply si env expr)
+  (define (emit-apply-arguments si args)
+    (unless (null? args)
+            (emit-expr si env (car args))
+            (emit-stack-save si)
+            (emit-apply-arguments (next-stack-index si) (cdr args))))
+  (emit-stack-save-from si 'lr)                        ;; we *need* to save the lr register to the stack, as it's our return point
+  (emit-apply-arguments (next-stack-index si) (call-args expr)) ;; thus, everything is offset by 1 wordsize down 
+  (emit-adjust-base si)                                         ;; from what is in the paper
+  (emit-call (assoc-val (call-target expr) env))
+  (emit-adjust-base (- si))
+  (emit-stack-load-to si 'lr))
+
+(define (letrec? expr)
+  (list-expr? 'letrec expr))
+
+(define letrec-bindings cadr)
+(define letrec-body caddr)
+
+(define (letrec-labels lvars)
+  (map (lambda (lvar) (format "_~s" lvar)) lvars))
+
+(define (make-initial-env lvars labels)
+  (map cons lvars labels))
+
+(define (emit-letrec expr)
+  (let* ((bindings (letrec-bindings expr))
+         (lvars (map car bindings))
+         (lambdas (map cadr bindings))
+         (labels (letrec-labels lvars))
+         (env (make-initial-env lvars labels)))
     (for-each (emit-lambda env) lambdas labels)
-    (emit-scheme-entry (letrec-body expr) si env)))
+    (emit-scheme-entry (letrec-body expr) env)))
+
 
 ;;
 ;;  Compiler
@@ -532,7 +527,7 @@
    [(variable? expr)        (emit-variable-ref env expr)]
    [(let? expr)             (emit-let si env expr)]
    [(let*? expr)            (emit-let si env expr)]
-   [(app? expr env)         (emit-app si env expr)]
+   [(apply? expr env)       (emit-apply si env expr)]
    (else (error 'emit-expr (format "~s is not a valid expression" expr)))))
 
 
@@ -548,21 +543,22 @@
   (emit " add sp, #4")
   (emit-ret))
 
-(define (emit-scheme-entry expr si env)
+
+(define (emit-scheme-entry expr env)
   (emit-function-header "_scheme_entry_2")
-  (emit-expr (- si wordsize) env expr)
+  (emit-expr (- wordsize) env expr)
   (emit-ret))
 
 (define (emit-cog-program program)
   (set! cog #t)
   (emit-program-header)
   (if (letrec? program) 
-      (emit-letrec program (- wordsize))
-      (emit-scheme-entry program (- wordsize) (make-initial-env '() '()))))
+      (emit-letrec program)
+      (emit-scheme-entry program (make-initial-env '() '()))))
 
 (define (emit-program program)
   (set! cog #f)
   (emit-program-header)
   (if (letrec? program) 
-      (emit-letrec program (- wordsize))
-      (emit-scheme-entry program (- wordsize) (make-initial-env '() '()))))
+      (emit-letrec program)
+      (emit-scheme-entry program (make-initial-env '() '()))))
