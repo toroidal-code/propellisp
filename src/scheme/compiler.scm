@@ -557,9 +557,11 @@
 (define (emit-program-header si)
   (emit "	.text")
   (emit-function-header "scheme_entry")
-  (emit-stack-save-from si 'lr) 
+  (emit "	sub	sp, #4")
+  (emit "	wrlong	lr, sp")
   (emit-call "scheme_entry_2")
-  (emit-stack-load-to si 'lr)
+  (emit "	rdlong	lr, sp")
+  (emit "	add	sp, #4")
   (if cog
       (emit-function-footer)
       (emit-hub-program-footer)))
