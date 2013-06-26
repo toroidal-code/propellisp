@@ -48,9 +48,11 @@ Tests can be run (with a Propeller attached) using `petite run-tests.scm`
 - 1.3: Unary Primitives (e.g. `(fixnum? 42) `)
 - 1.4: Conditional Expressions: if, and, or
 - 1.5: Binary Primitives and Operators (e.g. `(fx+ 32 4)`, `(fx> 32 -4)`)
-
+- 1.6: Local Variables (let, let*)
+- 1.7: Procedures (lambda)
+ 
 ##Currently in progress
-- 1.6 Local Variables
+
 - Cog mode support (-mcog) for running a program completely on a cog. [Read more here](https://code.google.com/p/propgcc/wiki/PropGccInDepth#Memory_Models_and_Mixed-Mode_Programming)
 
 
