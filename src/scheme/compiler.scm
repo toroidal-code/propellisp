@@ -6,6 +6,7 @@
 ;;	  | (or <Expr>* ...)
 ;;    | var
 ;;    | (let ((var <Expr>)* ...) <Expr>)
+;;    | (let* ((var <Expr>)* ...) <Expr>)
 ;;  <Imm>  -> fixnum | boolean | char | null
 ;;
 
@@ -390,10 +391,11 @@
 (define (emit-let si env expr)
   (define (process-let bindings si new-env)
     (cond
-     ([empty? bindings] (emit-expr si new-env (let-body expr)))
+     ((empty? bindings) (emit-expr si new-env (let-body expr)))
      (else
       (let ([b (car bindings)])
-        (emit-expr si env (cadr b))
+        (format "~a" env)
+        (emit-expr si (if (let*? expr) new-env env) (cadr b))
         (emit-stack-save si)
         (process-let (cdr bindings)
                      (next-stack-index si)
@@ -401,8 +403,25 @@
   (process-let (let-bindings expr) si env))
 
 
+;;
+;; 1.6 Supplemental -- let*
+;;
+(define (let*? expr)
+  (and (list? expr) (eq? (car expr) 'let*) (= 3 (length expr))))
 
-
+(define (emit-let* si env expr)
+  (define (process-let bindings si new-env)
+    (cond
+     ((empty? bindings)
+      (emit-expr si new-env (let-body expr)))
+     (else
+      (let ((b (car bindings)))
+        (emit-expr si new-env (cadr b))
+        (emit-stack-save si)
+        (process-let (cdr bindings)
+                     (next-stack-index si)
+                     (extend-env (car b) si new-env))))))
+  (process-let (let-bindings expr) si env))
 
 ;;
 ;;  Compiler
@@ -414,13 +433,14 @@
 
 (define (emit-expr si env expr)
   (cond
-   ([immediate? expr] (emit-immediate expr))
-   ([if? expr]	      (emit-if si env expr))
-   ([and? expr]       (emit-and si env expr))
-   ([or? expr]	      (emit-or si env expr))
-   ([primcall? expr]  (emit-primcall si env expr))
-   ([variable? expr]  (emit-variable-ref env expr))
-   ([let? expr]       (emit-let si env expr))
+   [(immediate? expr) (emit-immediate expr)]
+   [(if? expr)	      (emit-if si env expr)]
+   [(and? expr)       (emit-and si env expr)]
+   [(or? expr)	      (emit-or si env expr)]
+   [(primcall? expr)  (emit-primcall si env expr)]
+   [(variable? expr)  (emit-variable-ref env expr)]
+   [(let? expr)       (emit-let si env expr)]
+   [(let*? expr)      (emit-let si env expr)]
    (else (error 'emit-expr (format "~s is not a valid expression" expr)))))
 
 (define (emit-function-header f)
