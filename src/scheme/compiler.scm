@@ -228,16 +228,16 @@
 (define if-consequent caddr)
 (define if-alternate cadddr)
 
-(define (emit-if si env expr)
+(define (emit-if si env tail expr)
   (let ([alternate-label (unique-label)]
         [terminal-label (unique-label)])
     (emit-expr si env (if-predicate expr))
     (emit " cmp r0, #~s wz" boolean-f)
     (emit " IF_E ~a #~a" (mem-jump) alternate-label)
-    (emit-expr si env (if-consequent expr))
+    (emit-generic-expr si env tail (if-consequent expr))
     (emit-jmp terminal-label)
     (emit-label alternate-label)
-    (emit-expr si env (if-alternate expr))
+    (emit-generic-expr si env tail (if-alternate expr))
     (emit-label terminal-label)))
 
 (define (emit-jump-block si env expr condition label)
@@ -250,7 +250,7 @@
       (emit-jump-block si env rest condition label))))
 
 (define (emit-conditional-block default condition)
-  (lambda (si env expr)
+  (lambda (si env tail expr)
     (case (length expr)
       [(1) (emit-immediate default)]
       [(2) (emit-expr si env (cadr expr))]
@@ -411,10 +411,10 @@
 (define (extend-env var si new-env)
   (cons (cons var si) new-env))
 
-(define (emit-let si env expr)
+(define (emit-let si env tail expr)
   (define (process-let bindings si new-env)
     (cond
-     [(empty? bindings) (emit-expr si new-env (let-body expr))]
+     [(empty? bindings) (emit-generic-expr si new-env tail (let-body expr))]
      (else
       (let ([binding (car bindings)])
         (emit-expr si (if (let*? expr) new-env env) (cadr binding))
@@ -454,7 +454,7 @@
           (body (lambda-body expr)))
       (let fn ((fmls fmls) (si (next-stack-index 0)) (env env))
         (cond
-         ((null? fmls) (emit-expr si env body) (emit-ret))
+         ((null? fmls) (emit-tail-expr si env body) (emit-ret))
          (else
           (fn (cdr fmls) (next-stack-index si) (extend-env (car fmls) si env))))
         ))
@@ -474,18 +474,29 @@
 (define (assoc-val key alist)
   (cdr (assoc key alist)))
 
-(define (emit-apply si env expr)
+(define (emit-apply si env tail expr)
   (define (emit-apply-arguments si args)
     (unless (null? args)
             (emit-expr si env (car args))
             (emit-stack-save si)
             (emit-apply-arguments (next-stack-index si) (cdr args))))
-  (emit-stack-save-from si 'lr)                        ;; we *need* to save the lr register to the stack, as it's our return point
-  (emit-apply-arguments (next-stack-index si) (call-args expr)) ;; thus, everything is offset by 1 wordsize down 
-  (emit-adjust-base si)                                         ;; from what is in the paper
-  (emit-call (assoc-val (call-target expr) env))
-  (emit-adjust-base (- si))
-  (emit-stack-load-to si 'lr))
+  (define (emit-collapse-stack-frame si frame-size args)
+    (unless (or (= frame-size 0) (null? args))
+            (emit-stack-load si)
+            (emit-stack-save (+ si frame-size))
+            (emit-collapse-stack-frame (next-stack-index si) frame-size (cdr args))))
+  (emit-stack-save-from si 'lr)          ;; we *need* to save the lr register to the stack, as it's our return point 
+  (if tail
+      (begin
+        (emit-apply-arguments si (call-args expr))
+        (emit-collapse-stack-frame si (- (prev-stack-index si)) (call-args expr))
+        (emit-jmp (assoc-val (call-target expr) env)))
+      (begin
+        (emit-apply-arguments (next-stack-index si) (call-args expr)) ;; thus, everything is offset by 1 wordsize down 
+        (emit-adjust-base si)                                         ;; from what is in the paper
+        (emit-call (assoc-val (call-target expr) env))
+        (emit-adjust-base (- si))
+        (emit-stack-load-to si 'lr))))
 
 (define (letrec? expr)
   (list-expr? 'letrec expr))
@@ -517,19 +528,23 @@
   (emit "~a" f))
 
 
-(define (emit-expr si env expr)
+(define (emit-generic-expr si env tail expr)
   (cond
    [(immediate? expr)       (emit-immediate expr)]
-   [(if? expr)              (emit-if si env expr)]
-   [(and? expr)             (emit-and si env expr)]
-   [(or? expr)              (emit-or si env expr)]
+   [(if? expr)              (emit-if si env tail expr)]
+   [(and? expr)             (emit-and si env tail expr)]
+   [(or? expr)              (emit-or si env tail expr)]
    [(primitive-call? expr)  (emit-primitive-call si env expr)]
    [(variable? expr)        (emit-variable-ref env expr)]
-   [(let? expr)             (emit-let si env expr)]
-   [(let*? expr)            (emit-let si env expr)]
-   [(apply? expr env)       (emit-apply si env expr)]
+   [(let!? expr)            (emit-let si env tail expr)]
+   [(apply? expr env)       (emit-apply si env tail expr)]
    (else (error 'emit-expr (format "~s is not a valid expression" expr)))))
 
+(define (emit-expr si env expr)
+  (emit-generic-expr si env #f expr))
+
+(define (emit-tail-expr si env expr)
+  (emit-generic-expr si env #t expr))
 
 (define cog #f)
 
@@ -546,7 +561,7 @@
 
 (define (emit-scheme-entry expr env)
   (emit-function-header "_scheme_entry_2")
-  (emit-expr (- wordsize) env expr)
+  (emit-tail-expr (- wordsize) env expr)
   (emit-ret))
 
 (define (emit-cog-program program)
