@@ -1,13 +1,15 @@
-;;
-;;  <EXPR> -> <Imm>
-;;	  | (prim <Expr>)
-;;	  | (if <Expr> <Expr> <Expr>)
-;;	  | (and <Expr>* ...)
-;;	  | (or <Expr>* ...)
-;;    | var
-;;    | (let ((var <Expr>)* ...) <Expr>)
-;;    | (let* ((var <Expr>)* ...) <Expr>)
-;;  <Imm>  -> fixnum | boolean | char | null
+;; <Program> -> <Expr>
+;;           | (letrec ([lvar <Lambda>] ...) <Expr>)
+;;  <Lambda> -> (lambda (var ...) <Expr>)
+;;    <Expr> -> <Imm>
+;;	         | (prim <Expr>)
+;;	         | (if <Expr> <Expr> <Expr>)
+;;	         | (and <Expr>* ...)
+;;	         | (or <Expr>* ...)
+;;           | var
+;;           | (let ((var <Expr>)* ...) <Expr>)
+;;           | (let* ((var <Expr>)* ...) <Expr>)
+;;    <Imm>  -> fixnum | boolean | char | null
 ;;
 
 
@@ -104,6 +106,10 @@
 
 (define (primcall? expr)
   (and (pair? expr) (primitive? (car expr))))
+
+(define (primitive-arg-count x)
+  (or (getprop x '*arg-count*)
+      (error 'primitive-arg-count (format "primitive ~s has no arg count" x))))
 
 (define (check-primcall-args prim args)
   (= (getprop prim '*arg-count*) (length args)))
@@ -276,13 +282,13 @@
   (emit "	sub	r14, #~s" (abs si))     ;; 'increment' the stack pointer 'down' a single wordlength
   (emit "	rdlong	~s, r14" register))
 
-(define (emit-stack-save-to si register)
+(define (emit-stack-save-from si register)
   (emit "	mov	r14, sp")               ;; move the stack pointer to our scratch area
   (emit "	sub	r14, #~s" (abs si))     ;; 'increment' the stack pointer 'down' a single wordlength
   (emit "	wrlong	~s, r14" register))
 
 (define (emit-stack-save si)
-  (emit-stack-save-to si 'r0))
+  (emit-stack-save-from si 'r0))
 
 (define (emit-stack-load si)
   (emit-stack-load-to si 'r0))
@@ -364,8 +370,6 @@
 
 (define variable? symbol?)
 
-
-
 (define (emit-variable-ref env expr)
   (let ([pair (assoc expr env)])
     (if pair (emit-stack-load (cdr pair))
@@ -380,7 +384,6 @@
 (define let-body caddr)
 
 (define empty? null?)
-
 
 (define (next-stack-index si) 
   (- si wordsize))
@@ -424,6 +427,100 @@
   (process-let (let-bindings expr) si env))
 
 ;;
+;; 1.7 Procedures
+;;
+(define (emit-call label)
+  (if cog
+      (emit "	jmpret	lr, #_~a" label)
+      (emit "	lcall	#_~a" label)))
+
+(define  (emit-ret)
+  (if cog
+      (emit "	jmp	lr")
+      (emit "	mov	pc,lr")))
+
+(define (letrec? expr)
+  (and (list? expr) (not (null? expr)) (eq? (car expr) 'letrec)))
+
+(define (make-initial-env lvars labels)
+  (map cons lvars labels))
+
+(define call-target car)
+
+(define (app? expr env)
+  (and (list? expr) (not (null? expr)) (assoc (call-target expr) env)))
+
+(define letrec-bindings cadr)
+(define letrec-body caddr)
+
+(define unique-labels
+  (let ([count  0])
+    (lambda (lvars)
+      (map (lambda (lvar)
+             (let ([label (format "~s_~s" lvar count)])
+               (set! count (add1 count))
+               label))
+           lvars))))
+
+(define lambda-formals cadr)
+(define lambda-body caddr)
+
+(define call-args cdr)
+
+(define (emit-adjust-base si)
+  (unless (= si 0)
+          (cond ((> 0 si) (emit "	sub	sp, #~s" (abs si)))
+                ((< 0 si) (emit "	add	sp, #~s" si)))))
+
+(define (emit-app si env expr)
+  (define (emit-arguments si args)
+    (unless (empty? args)
+            (emit-expr si env (car args))
+            (emit-stack-save si)
+            (emit-arguments (- si wordsize) (cdr args))))
+  (emit-arguments (- si wordsize) (call-args expr))
+  (emit-stack-save-from si 'lr) 
+  (emit-adjust-base si)
+  (emit-call (cdr (assoc (call-target expr) env)))
+  (emit-adjust-base (- si))
+  (emit-stack-load-to si 'lr))
+
+(define (emit-lambda env)
+  (lambda (expr label)
+    (emit-function-header label)
+    (let ([fmls (lambda-formals expr)]
+          [body (lambda-body expr)])
+      (let f ([fmls fmls]
+              [si (- wordsize)]
+              [env env])
+        (cond
+         [(empty? fmls) (emit-expr si env body) (emit-ret)]
+         (else
+          (f (cdr fmls)
+             (- si wordsize)
+             (extend-env (car fmls) si env))))))))
+
+
+(define (emit-letrec expr si)
+  (let* ([bindings (letrec-bindings expr)]
+         [lvars (map car bindings)]
+         [lambdas (map cadr bindings)]
+         [labels (unique-labels lvars)]
+         [env (make-initial-env lvars labels)])
+    (for-each (emit-lambda env) lambdas labels)
+    (emit-scheme-entry (letrec-body expr) si env)))
+
+(define (mask-primitive prim label)
+  (when (primitive? prim)
+        (putprop label '*is-prim* #t)
+        (putprop label '*arg-count* (primitive-arg-count prim))
+        (putprop label '*emitter* (primitive-emitter prim))))
+
+(map mask-primitive
+     '($fxzero? $fxsub1)
+     '( fxzero?  fxsub1))
+
+;;
 ;;  Compiler
 ;;
 
@@ -441,52 +538,47 @@
    [(variable? expr)  (emit-variable-ref env expr)]
    [(let? expr)       (emit-let si env expr)]
    [(let*? expr)      (emit-let si env expr)]
+   [(app? expr env)   (emit-app si env expr)]
    (else (error 'emit-expr (format "~s is not a valid expression" expr)))))
 
 (define (emit-function-header f)
-  (emit "	.text")
   (emit "	.balign 4")
   (emit "	.global _~a" f)
   (emit-label f))
 
-; (define (emit-function-footer)
-;   (emit "	mov r0, r7"))
-
-(define (emit-hub-function-footer)
-  ;;(emit-function-footer)
+(define (emit-hub-program-footer)
   (emit "	mov	pc, lr"))
 
-(define (emit-cog-function-footer)
-  ;;(emit-function-footer)
+(define (emit-function-footer)
   (emit "	jmp lr"))
 
 (define cog #f)
 
-(define (emit-program expr)
-  (set! cog #f)
+(define (emit-program-header si)
+  (emit "	.text")
   (emit-function-header "scheme_entry")
-  ; (emit "	sub	sp, #~a" wordsize)
-  ; (emit "	mov	r7, sp")
-  ; (emit "	wrlong	r0, r7")
-  ; (emit "	mov	r7, sp")
-  ; (emit "	rdlong	r7, r7")
-  ; (emit "	~a 	_L_scheme_entry" (mem-jump))
-  ; (emit-label "L_scheme_entry")
-  (emit-expr (- wordsize) '() expr)
-  ; (emit "	add	sp, #~a" wordsize)
-  (emit-hub-function-footer))
+  (emit-stack-save-from si 'lr) 
+  (emit-call "scheme_entry_2")
+  (emit-stack-load-to si 'lr)
+  (if cog
+      (emit-function-footer)
+      (emit-hub-program-footer)))
 
-(define (emit-cog-program expr)
+(define (emit-scheme-entry expr si env)
+  (emit-function-header "scheme_entry_2")
+  (emit-expr (- si wordsize) env expr)
+  (emit-ret))
+
+(define (emit-cog-program program)
   (set! cog #t)
-  (emit-function-header "scheme_entry")
-  ; (emit "	sub	sp, #~a" wordsize)
-  ; (emit "	mov	r7, sp")
-  ; (emit "	wrlong	r0, r7")
-  ; (emit "	mov	r7, sp")
-  ; (emit "	rdlong	r7, r7")
-  ; (emit "	~a 	_L_scheme_entry" (mem-jump))
-  ; (emit-label "L_scheme_entry")
-  (emit-expr (- wordsize) '() expr)
-  ; (emit "	add	sp, #~a" wordsize)
-  (emit-cog-function-footer))
+  (emit-program-header (- wordsize))
+  (if (letrec? program) 
+      (emit-letrec program (- wordsize))
+      (emit-scheme-entry program (- wordsize) (make-initial-env '() '()))))
 
+(define (emit-program program)
+  (set! cog #f)
+  (emit-program-header (- wordsize))
+  (if (letrec? program) 
+      (emit-letrec program (- wordsize))
+      (emit-scheme-entry program (- wordsize) (make-initial-env '() '()))))
