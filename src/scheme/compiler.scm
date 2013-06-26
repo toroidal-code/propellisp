@@ -270,25 +270,31 @@
 ;	 (set! count (add1 count))
 ;	 label))))
 
-(define (emit-binary-operator si env arg1 arg2)
-  (emit-expr si env arg1)
-  ;(emit "	sub	sp, #~s" (abs si env ))   ;; 'increment' the stack pointer 'down'
+(define (emit-stack-load-to si register)
   (emit "	mov	r14, sp")               ;; move the stack pointer to our scratch area
   (emit "	sub	r14, #~s" (abs si))     ;; 'increment' the stack pointer 'down' a single wordlength
-  (emit "	wrlong	r0, r14")           ;; moves first arg to the stack
-  (emit-expr (- si wordsize) env arg2)   ;; places arg1 value into r0
-  (emit "	mov	r14, sp")               ;; move the stack pointer to our scratch area
-  (emit "	sub	r14, #~s" (abs si)) 
-  (emit "	rdlong	r1, r14"))          ;; arg0 value to r1)
+  (emit "	rdlong	~s, r14" register))
 
-(define (emit-binary-ending) '())
-  ;(emit "	add	sp, #~s" (abs si))) ;; 'decrement' the stack pointer 'up'
-  ;;(emit "	add	sp, #~s" wordsize))   ;; 'decrement' the stack pointer 'up' a single wordlength
+(define (emit-stack-save-to si register)
+  (emit "	mov	r14, sp")               ;; move the stack pointer to our scratch area
+  (emit "	sub	r14, #~s" (abs si))     ;; 'increment' the stack pointer 'down' a single wordlength
+  (emit "	wrlong	~s, r14" register))
+
+(define (emit-stack-save si)
+  (emit-stack-save-to si 'r0))
+
+(define (emit-stack-load si)
+  (emit-stack-load-to si 'r0))
+
+(define (emit-binary-operator si env arg1 arg2)
+  (emit-expr si env arg1)
+  (emit-stack-save si)           ;; places arg1 value into r0
+  (emit-expr (- si wordsize) env arg2)                
+  (emit-stack-load-to si 'r1))          ;; arg0 value to r16
 
 (define-primitive (fx+ si env arg1 arg2)
   (emit-binary-operator si env arg1 arg2)
-  (emit "	add	r0, r1")        ;; adds r1 to r0, replacing r0
-  (emit-binary-ending))
+  (emit "	add	r0, r1"))        ;; adds r1 to r0, replacing r0
 
 (define-primitive (fx- si env arg1 arg2)
   "Because subtraction is not commutative,
@@ -296,8 +302,7 @@
    so that the result is in r0"
   (emit-binary-operator si env arg1 arg2)
   (emit "	sub	r1, r0")          ;; subtracts r0 (the second arg) from r1 (the first arg), replacing r1
-  (emit "	mov	r0, r1")          ;; move r1 to r0
-  (emit-binary-ending))
+  (emit "	mov	r0, r1"))          ;; move r1 to r0
 
 (define-primitive (fx* si env arg1 arg2)
   (let ([label (unique-label)])
@@ -311,11 +316,10 @@
     (emit "	shr	r1, #1	wz, wc") 
     (emit " IF_C	add	r0, r2") 
     (emit "	add	r2, r2") 
-    (emit " IF_NZ	~a	#_~a" (mem-jump) label) 
-    (emit-binary-ending)))
+    (emit " IF_NZ	~a	#_~a" (mem-jump) label)))
 
 (define-primitive (fxlognot si env arg1)
-	(emit-expr si env arg1)
+  (emit-expr si env arg1)
   (emit "	shr	r0, #~s" fixnum-shift)
   (emit "	xor	r0, __MASK_FFFFFFFF")
   (emit "	shl	r0, #~s" fixnum-shift)) ;; not operator
@@ -324,21 +328,18 @@
   "Since OR is commutative, the ending 
    register doesn't matter, so we use r0"
   (emit-binary-operator si env arg1 arg2)
-  (emit "	or	r0, r1")
-  (emit-binary-ending))
+  (emit "	or	r0, r1"))
 
 (define-primitive (fxlogand si env arg1 arg2)
   (emit-binary-operator si env arg1 arg2)
-  (emit "	and	r0, r1")
-  (emit-binary-ending))
+  (emit "	and	r0, r1"))
 
 (define (define-binary-predicate op si env arg1 arg2)
   (emit-binary-operator si env arg1 arg2)
   ;;cmps is used, as this is the first case where we might deal with 
   ;;two signed values that _should_ not equal each other
   (emit "	cmps	r1, r0 wz, wc") ;; since r1 is our first arg, we use that as the basis for comparison
-  (emit-predicate op)
-  (emit-binary-ending))
+  (emit-predicate op))
 
 (define-primitive (fx= si env arg1 arg2)
   (define-binary-predicate 'IF_E si env arg1 arg2))
@@ -362,10 +363,7 @@
 
 (define variable? symbol?)
 
-(define (emit-stack-load si)
-  (emit "	mov	r14, sp")               ;; move the stack pointer to our scratch area
-  (emit "	sub	r14, #~s" (abs si)) 
-  (emit "	rdlong	r0, r14"))
+
 
 (define (emit-variable-ref env expr)
   (let ([pair (assoc expr env)])
@@ -382,10 +380,6 @@
 
 (define empty? null?)
 
-(define (emit-stack-save si)
-  (emit "	mov	r14, sp")               ;; move the stack pointer to our scratch area
-  (emit "	sub	r14, #~s" (abs si)) 
-  (emit "	wrlong	r0, r14"))
 
 (define (next-stack-index si) 
   (- si wordsize))
