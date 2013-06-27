@@ -50,11 +50,12 @@ Tests can be run (with a Propeller attached) using `petite run-tests.scm`
 - 1.5: Binary Primitives and Operators (e.g. `(fx+ 32 4)`, `(fx> 32 -4)`)
 - 1.6: Local Variables (let, let*)
 - 1.7: Procedures (letrec)
+- 1.8: Iteration and Tail calls
+- Support for cog vs hub specialized calls (branch, jump, return)
  
 ##Currently in progress
-- 1.8: Iteration and Tails calls
 - Cog mode support (-mcog) for running a program completely on a cog. [Read more here](https://code.google.com/p/propgcc/wiki/PropGccInDepth#Memory_Models_and_Mixed-Mode_Programming)
-
+- 1.9: Heap and data structures (vector, cons pair, etc)
 
 ##Todo 
 ####(beyond the scope of the paper, in order of increasing difficulty)
